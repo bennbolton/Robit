@@ -12,10 +12,6 @@ robit = Robit()
 fpsClock = pygame.time.Clock()
 
 
-
-
-
-
 if __name__ == '__main__':
 
     looping = True
