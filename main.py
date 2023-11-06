@@ -2,21 +2,30 @@ import pygame, sys
 from pygame.locals import *
 from Robit import Robit
 
+
 pygame.init()
 
 
 robit = Robit()
 
+
 fpsClock = pygame.time.Clock()
+
+
+
+
 
 
 if __name__ == '__main__':
 
     looping = True
 
+
+
     while looping:
 
          # Get inputs --------
+        mx, my = pygame.mouse.get_pos()
         for event in pygame.event.get() :
             if event.type == QUIT:
                 pygame.quit()
@@ -29,13 +38,20 @@ if __name__ == '__main__':
                     robit.blink(wink=True)
                 if event.key == pygame.K_s:
                     robit.toggleSmile()
+                if event.key == pygame.K_m:
+                    robit.toggleMenu()
+                if event.key == pygame.K_ESCAPE:
+                    pygame.quit()
+                    sys.exit()
+
 
     
         # Processing --------
-    
+      
     
         
 
 
         # Render elements of the game
+        
         robit.update()
