@@ -1,11 +1,17 @@
 import pygame
 from random import randint
 from math import pi
+from utils import config
 
 class Robit():
     
     
     def __init__(self, displayWidth=800,displayHeight=480,fps=60,colour=(70, 235, 52),):
+
+        
+
+
+
         self.colour = colour
         self.fps = fps
         self.displayWidth = displayWidth
