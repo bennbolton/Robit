@@ -18,6 +18,15 @@ def updateConfig(**kwargs):
 
 def resetConfig():
     config.clear()
+    config.add_section('SETTINGS')
     with open(CONFIGPATH, 'w') as configFile:
         config.write(configFile)
+
+
+
+def getConfig(*keys):
+    for key in keys:
+        if key in config['DEFAULT']:
+            return eval(config['SETTINGS'][str(key)])
+        
 

@@ -6,7 +6,7 @@ from Robit import Robit
 pygame.init()
 
 
-robit = Robit()
+robit = Robit(displayWidth=3024, displayHeight=1964)
 
 
 fpsClock = pygame.time.Clock()

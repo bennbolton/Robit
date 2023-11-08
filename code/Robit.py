@@ -1,7 +1,7 @@
 import pygame
 from random import randint
 from math import pi
-from utils import config
+import utils as ut
 
 class Robit():
     
@@ -29,7 +29,9 @@ class Robit():
 
         # Animations
         self._eyeDim = (150,300)
-        self._eyePosL = 100
+        var = 3*displayWidth/16
+        self._eyeDim = (var, 2*var)
+        self._eyePosL = self.displayWidth/8
         self._eyePosR = self.displayWidth - self._eyePosL - self._eyeDim[0]
         self._blinkFramesLeft = 0
         self._smiling = False
@@ -66,13 +68,16 @@ class Robit():
             return image
 
 
-    def changeColour(self, colour):
+    def changeColour(self, colour: tuple):
         '''Use to change the main colour of all aspects of the display'''
         self.colour = colour
+        ut.updateConfig(accentColour=colour)
+
         
     def changeBackground(self, background):
         '''Use to change the background colour of the display'''
         self.backgroundColour = background
+        ut.updateConfig(backgroundColour=background)
     
 
     def blink(self,duration=15, wink=False):
@@ -118,8 +123,8 @@ class Robit():
             eyeHeight = grad * self._menuOpenFramesLeft - intercept
             eyeYOffset = (self.displayHeight-eyeHeight)/2
 
-            pygame.draw.ellipse(self.display, self.colour, [self._eyePosL,eyeYOffset,150,eyeHeight], 200)
-            pygame.draw.ellipse(self.display, self.colour, [self._eyePosR,eyeYOffset,150,eyeHeight], 200)
+            pygame.draw.ellipse(self.display, self.colour, [self._eyePosL,eyeYOffset,self._eyeDim[0],eyeHeight], 0)
+            pygame.draw.ellipse(self.display, self.colour, [self._eyePosR,eyeYOffset,self._eyeDim[0],eyeHeight], 0)
 
 
             self._menuOpenFramesLeft -= 1
@@ -230,8 +235,14 @@ class Robit():
             rightEyeYOffset = (self.displayHeight - self._eyeDim[1]) / 2
             rightEyeHeight = self._eyeDim[1]
 
-        pygame.draw.ellipse(self.display, self.colour, [self._eyePosL, eyeYOffset, self._eyeDim[0], eyeHeight], 0)
-        pygame.draw.ellipse(self.display, self.colour, [self._eyePosR, rightEyeYOffset ,self._eyeDim[0], rightEyeHeight], 0)
+
+
+        colour = ut.getConfig('accentColour')
+
+
+
+        pygame.draw.ellipse(self.display, colour, [self._eyePosL, eyeYOffset, self._eyeDim[0], eyeHeight], 0)
+        pygame.draw.ellipse(self.display, colour, [self._eyePosR, rightEyeYOffset ,self._eyeDim[0], rightEyeHeight], 0)
 
 
 
