@@ -1,62 +1,77 @@
 import pygame
 from random import randint
 from math import pi
+import os
 import utils as ut
 
 class Robit():
     
     
-    def __init__(self, displayWidth=800,displayHeight=480,fps=60,colour=(70, 235, 52),):
-
+    def __init__(self, **kwargs):
+        '''Initialise with kwargs to update settings from beginning.
+            
+            Key words available are: 
+            
+            displayres ;
+            displayfps ;
+            fullscreeen ;
+            showmouse ;
+            accentcolour ;
+            backgroundcolour ;
+            menupad ;
+            menulinethickness ;
+            ambientblink'''
         
+        ut.updateConfig(**kwargs)
 
+        displayRes = ut.getConfig('displayres')
 
-
-        self.colour = colour
-        self.fps = fps
-        self.displayWidth = displayWidth
-        self.displayHeight = displayHeight
-
-        self.backgroundColour = (0,0,0)
-
-
-        self.display = pygame.display.set_mode((displayWidth, displayHeight), pygame.FULLSCREEN)
+        self.display = pygame.display.set_mode(displayRes, pygame.FULLSCREEN) if ut.getConfig('fullscreen') else pygame.display.set_mode(displayRes)
         pygame.display.set_caption('Robit')
         pygame.mouse.set_visible(False)
 
         self.fpsClock = pygame.time.Clock()
+        self._totalTicks = 0
 
 
         # Animations
         self._eyeDim = (150,300)
-        var = 3*displayWidth/16
+        var = 3*displayRes[0]/16
         self._eyeDim = (var, 2*var)
-        self._eyePosL = self.displayWidth/8
-        self._eyePosR = self.displayWidth - self._eyePosL - self._eyeDim[0]
+        self._eyePosL = displayRes[0]/8
+        self._eyePosR = displayRes[0] - self._eyePosL - self._eyeDim[0]
+
+        self._iconSize = displayRes[0] / 20
+
         self._blinkFramesLeft = 0
         self._smiling = False
         self._winking = False
         self._displayScreen = 'face'
-        self.blinkAmbient = True
         self._lastBlink = 0
         self._nextRandomBlink = 300
 
+        self._batteryPercent = 75
+        self._internetPercent = 75
+
         #Menu
-        
+
+
+        self._icons = {}
+        for image in os.listdir('data/imgs/icons'):
+            if image[-4:] == '.png':
+                path = 'data/imgs/icons/' + str(image)
+                img = self.colourise(pygame.image.load(path), ut.getConfig('accentcolour'))
+                img = pygame.transform.scale(img, (self._iconSize,self._iconSize))
+                self._icons[image[:-4]] = img
+            
+        self._font = pygame.font.Font('data/pixel.otf', 40)
+        self._homeText = self._font.render('Robit Home', True, ut.getConfig('accentcolour'))
 
 
 
 
-        self._padding = 20
-        self._menuLineWidth = 2
-        self.settingsImg = self.colorize(pygame.image.load('imgs/settings.png'), self.colour)
 
-        self.settingsImg = pygame.transform.scale(self.settingsImg, (50,50))
-
-
-
-
-    def colorize(self, image, newColor):
+    def colourise(self, image, newColor):
 
             image = image.copy()
 
@@ -70,13 +85,11 @@ class Robit():
 
     def changeColour(self, colour: tuple):
         '''Use to change the main colour of all aspects of the display'''
-        self.colour = colour
         ut.updateConfig(accentColour=colour)
 
         
     def changeBackground(self, background):
         '''Use to change the background colour of the display'''
-        self.backgroundColour = background
         ut.updateConfig(backgroundColour=background)
     
 
@@ -91,7 +104,7 @@ class Robit():
                 self._winking = False
 
     def toggleSmile(self):
-        '''Toggles whether the mouth is visible or not'''
+        '''Toggles whether the mouth is visible or not. (Not Currently available)'''
         if self._displayScreen == 'face':
             self._smiling = not self._smiling
 
@@ -112,19 +125,24 @@ class Robit():
 
     def _menuOpenAnimation(self):
         
+        colour = ut.getConfig('accentcolour')
+        padding = ut.getConfig('menupadding')
+        lineWidth = ut.getConfig('menulinewidth')
+        displayWidth, displayHeight = ut.getConfig('displayres')
+
         partTime = self._menuOpenDuration / 3
         if self._menuOpenFramesLeft > 2 * partTime:
             # Eye Close
-            grad = (self._eyeDim[1] - (2*self._menuLineWidth)) / (partTime)
+            grad = (self._eyeDim[1] - (2*lineWidth)) / (partTime)
 
             intercept = (self._menuOpenDuration * grad) - self._eyeDim[1]
 
         
             eyeHeight = grad * self._menuOpenFramesLeft - intercept
-            eyeYOffset = (self.displayHeight-eyeHeight)/2
+            eyeYOffset = (displayHeight-eyeHeight)/2
 
-            pygame.draw.ellipse(self.display, self.colour, [self._eyePosL,eyeYOffset,self._eyeDim[0],eyeHeight], 0)
-            pygame.draw.ellipse(self.display, self.colour, [self._eyePosR,eyeYOffset,self._eyeDim[0],eyeHeight], 0)
+            pygame.draw.ellipse(self.display, colour, [self._eyePosL,eyeYOffset,self._eyeDim[0],eyeHeight], 0)
+            pygame.draw.ellipse(self.display, colour, [self._eyePosR,eyeYOffset,self._eyeDim[0],eyeHeight], 0)
 
 
             self._menuOpenFramesLeft -= 1
@@ -134,86 +152,93 @@ class Robit():
             # Line Extend
 
 
-            Yrect = (self.displayHeight - 2*self._menuLineWidth) / 2
+            Yrect = (displayHeight - 2*lineWidth) / 2
 
 
-            grad = (self._eyeDim[0] - (self.displayWidth/2)-self._padding) / partTime
-            intercept = (self.displayWidth/2)-self._padding - grad * partTime
+            grad = (self._eyeDim[0] - (displayWidth/2)-padding) / partTime
+            intercept = (displayWidth/2)-padding - grad * partTime
 
             length = grad * self._menuOpenFramesLeft + intercept
 
 
-            posGrad = (self._eyePosL-self._padding)/partTime
-            posIntercept = self._padding - posGrad*partTime
+            posGrad = (self._eyePosL-padding)/partTime
+            posIntercept = padding - posGrad*partTime
 
 
             XLOffset = posGrad*self._menuOpenFramesLeft + posIntercept
-            XROffset = self.displayWidth - XLOffset - length
+            XROffset = displayWidth - XLOffset - length
       
 
-            pygame.draw.rect(self.display, self.colour, [XLOffset, Yrect, length, 2*self._menuLineWidth], self._menuLineWidth)
-            pygame.draw.rect(self.display, self.colour, [XROffset, Yrect, length, 2*self._menuLineWidth], self._menuLineWidth)
+            pygame.draw.rect(self.display, colour, [XLOffset, Yrect, length, 2*lineWidth], lineWidth)
+            pygame.draw.rect(self.display, colour, [XROffset, Yrect, length, 2*lineWidth], lineWidth)
 
             self._menuOpenFramesLeft -= 1
         elif self._menuOpenFramesLeft > 0:
             # Box up
             self._handleMenu()
+            backgroundColour = ut.getConfig('backgroundcolour')
             
-            grad = (2*self._menuLineWidth-(self.displayHeight-2*self._padding))/partTime
-            intercept = self.displayHeight-2*self._padding
+            grad = (2*lineWidth-(displayHeight-2*padding))/partTime
+            intercept = displayHeight-2*padding
             
             height = grad * self._menuOpenFramesLeft + intercept
             
-            YOffset = (self.displayHeight-height)/2
+            YOffset = (displayHeight-height)/2
 
 
-            pygame.draw.rect(self.display, self.backgroundColour, [0,0, self.displayWidth, YOffset], 0)
-            pygame.draw.rect(self.display, self.backgroundColour, [0,(YOffset+height), self.displayWidth, YOffset], 0)
+            pygame.draw.rect(self.display, backgroundColour, [0,0, displayWidth, YOffset], 0)
+            pygame.draw.rect(self.display, backgroundColour, [0,(YOffset+height), displayWidth, YOffset], 0)
 
 
-            pygame.draw.rect(self.display, self.colour, [self._padding, YOffset, (self.displayWidth-2*self._padding), height], self._menuLineWidth)
+            pygame.draw.rect(self.display, colour, [padding, YOffset, (displayWidth-2*padding), height], lineWidth)
 
             self._menuOpenFramesLeft -= 1
         else:
             self._displayScreen = 'menu'
 
     def _menuCloseAnimation(self):
+
+        colour = ut.getConfig('accentcolour')
+        padding = ut.getConfig('menupadding')
+        lineWidth = ut.getConfig('menulinewidth')
+        displayWidth, displayHeight = ut.getConfig('displayres')
+
         partTime = self._menuCloseDuration / 3
         if self._menuCloseFramesLeft > 2 * partTime:
             self._handleMenu()
+            backgroundColour = ut.getConfig('backgroundcolour')
             # Menu close
-            grad = ((self.displayHeight-2*self._padding)-2*self._menuLineWidth)/partTime
-            intercept = -(grad*self._menuCloseDuration - (self.displayHeight-2*self._padding))
+            grad = ((displayHeight-2*padding)-2*lineWidth)/partTime
+            intercept = -(grad*self._menuCloseDuration - (displayHeight-2*padding))
             height = grad * self._menuCloseFramesLeft + intercept
 
-            YOffset = (self.displayHeight-height)/2
+            YOffset = (displayHeight-height)/2
 
-            pygame.draw.rect(self.display, self.backgroundColour, [0,0, self.displayWidth, YOffset], 0)
-            pygame.draw.rect(self.display, self.backgroundColour, [0,(YOffset+height), self.displayWidth, YOffset], 0)
+            pygame.draw.rect(self.display, backgroundColour, [0,0, displayWidth, YOffset], 0)
+            pygame.draw.rect(self.display, backgroundColour, [0,(YOffset+height), displayWidth, YOffset], 0)
 
-            pygame.draw.rect(self.display, self.colour, [self._padding, YOffset, (self.displayWidth-2*self._padding), height], self._menuLineWidth)
+            pygame.draw.rect(self.display, colour, [padding, YOffset, (displayWidth-2*padding), height], lineWidth)
 
             self._menuCloseFramesLeft -=1
         
         elif self._menuCloseFramesLeft > partTime:
             fraction = (self._menuCloseFramesLeft - partTime)/ partTime
-            print(fraction)
 
-            length = fraction * (self.displayWidth-2*self._padding)
-            Xpos = (self.displayWidth - length)/2
-            Ypos = (self.displayHeight - self._menuLineWidth*2)/2
+            length = fraction * (displayWidth-2*padding)
+            Xpos = (displayWidth - length)/2
+            Ypos = (displayHeight - lineWidth*2)/2
 
-            pygame.draw.rect(self.display, self.colour, [Xpos, Ypos, length, 2*self._menuLineWidth], self._menuLineWidth)
+            pygame.draw.rect(self.display, colour, [Xpos, Ypos, length, 2*lineWidth], lineWidth)
 
             self._menuCloseFramesLeft -=1
 
         elif self._menuCloseFramesLeft > 0:
             fraction = 1 - (self._menuCloseFramesLeft / partTime)
             height = self._eyeDim[1] * fraction
-            YOffset = (self.displayHeight - height) / 2
+            YOffset = (displayHeight - height) / 2
 
-            pygame.draw.ellipse(self.display, self.colour, [self._eyePosL, YOffset, self._eyeDim[0], height], 0)
-            pygame.draw.ellipse(self.display, self.colour, [self._eyePosR, YOffset, self._eyeDim[0], height], 0)
+            pygame.draw.ellipse(self.display, colour, [self._eyePosL, YOffset, self._eyeDim[0], height], 0)
+            pygame.draw.ellipse(self.display, colour, [self._eyePosR, YOffset, self._eyeDim[0], height], 0)
 
             self._menuCloseFramesLeft -= 1
 
@@ -221,18 +246,19 @@ class Robit():
             self._displayScreen = 'face'
 
     def _handleEyes(self):
+        displayWidth, displayHeight = ut.getConfig('displayres')
         if self._blinkFramesLeft > 0:
             blinkFraction = abs((self._blinkFramesLeft-(self._blinkDuration/2))/(self._blinkDuration/2))
             rightEyeHeight = eyeHeight = blinkFraction * self._eyeDim[1]
-            rightEyeYOffset = eyeYOffset = (self.displayHeight-eyeHeight)/2
+            rightEyeYOffset = eyeYOffset = (displayHeight-eyeHeight)/2
             self._blinkFramesLeft -= 1
         else:
             rightEyeHeight = eyeHeight = self._eyeDim[1]
-            rightEyeYOffset = eyeYOffset = (self.displayHeight - self._eyeDim[1]) / 2
+            rightEyeYOffset = eyeYOffset = (displayHeight - self._eyeDim[1]) / 2
             
 
         if self._winking:
-            rightEyeYOffset = (self.displayHeight - self._eyeDim[1]) / 2
+            rightEyeYOffset = (displayHeight - self._eyeDim[1]) / 2
             rightEyeHeight = self._eyeDim[1]
 
 
@@ -247,18 +273,45 @@ class Robit():
 
 
     def _handleSmile(self):
+        colour = ut.getConfig('accentcolour')
         if self._smiling:
-            pygame.draw.arc(self.display, self.colour, [275,200,250,200], pi, 2*pi, 5)
+            pass #Need to pygame.draw a new smile here
 
 
     def _handleMenu(self):
-        if self._menuOpenFramesLeft == 0:
-            pad = self._padding
-            pygame.draw.rect(self.display, self.colour, [pad, pad, self.displayWidth-(2*pad),self.displayHeight-(2*pad)], self._menuLineWidth)
+        colour = ut.getConfig('accentcolour')
+        padding = ut.getConfig('menupadding')
+        lineWidth = ut.getConfig('menulinewidth')
+        displayWidth, displayHeight = ut.getConfig('displayres')
+            
+        pygame.draw.rect(self.display, colour, [padding, padding, displayWidth-(2*padding),displayHeight-(2*padding)], lineWidth)
+
         
+        insideLine = 2*padding + lineWidth
+        divideLineY = insideLine + self._iconSize + padding
+        divideLineX = insideLine
+
+        pygame.draw.rect(self.display, colour, [divideLineX, divideLineY, displayWidth-2*divideLineX,2*lineWidth],lineWidth)
         
-        self.display.blit(self.settingsImg, (400,100))
-        self.display.blit(self.settingsImg, (400,300))
+        self.display.blit(self._icons['home'], (divideLineX, insideLine))
+
+
+        
+
+        self.display.blit(self._icons['battery'+str(self._batteryPercent)], (displayWidth-insideLine-self._iconSize, insideLine))
+        if self._totalTicks % 100 < 50 and self._internetPercent == 0:
+            self.display.blit(self._icons['internet'+str(self._internetPercent)], (displayWidth-insideLine-self._iconSize*2-padding, insideLine))
+        elif self._internetPercent > 0:
+            self.display.blit(self._icons['internet'+str(self._internetPercent)], (displayWidth-insideLine-self._iconSize*2-padding, insideLine))
+        
+        self.display.blit(self._homeText, (insideLine+self._iconSize+padding, insideLine))
+
+        
+    def _handleClick(mx, my):
+        pass
+
+        
+
 
 
 
@@ -278,13 +331,13 @@ class Robit():
 
 
         #Ambience
-        if self.blinkAmbient:
+        if ut.getConfig('ambientblink'):
             self._randomBlink()
 
 
 
         # Fill Background
-        self.display.fill(self.backgroundColour)
+        self.display.fill(ut.getConfig('backgroundcolour'))
 
 
         # Handle display
@@ -303,7 +356,10 @@ class Robit():
 
         # After all
         pygame.display.update()
-        self.fpsClock.tick(self.fps)
+        self._totalTicks +=1
+        self.fpsClock.tick(ut.getConfig('displayfps'))
+
+        
         
         
         

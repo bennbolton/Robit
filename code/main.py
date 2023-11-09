@@ -6,10 +6,8 @@ from Robit import Robit
 pygame.init()
 
 
-robit = Robit(displayWidth=3024, displayHeight=1964)
+robit = Robit()
 
-
-fpsClock = pygame.time.Clock()
 
 
 if __name__ == '__main__':
@@ -39,7 +37,19 @@ if __name__ == '__main__':
                 if event.key == pygame.K_ESCAPE:
                     pygame.quit()
                     sys.exit()
+                if event.key == pygame.K_UP and robit._batteryPercent + 25 <= 75:
+                    robit._batteryPercent += 25
+                    robit._internetPercent += 25
+                if event.key == pygame.K_DOWN and robit._batteryPercent - 25 >= 0:
+                    robit._batteryPercent -= 25
+                    robit._internetPercent -= 25
+                
 
+
+
+
+                if event.key == pygame.MOUSEBUTTONDOWN:
+                    robit._handleClick(mx, my)
 
     
         # Processing --------
