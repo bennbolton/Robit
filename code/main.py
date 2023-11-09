@@ -48,13 +48,14 @@ if __name__ == '__main__':
 
 
 
-                if event.key == pygame.MOUSEBUTTONDOWN:
-                    robit._handleClick(mx, my)
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                robit._handleClick(mx, my)
+
 
     
         # Processing --------
       
-    
+            
         
 
 

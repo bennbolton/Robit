@@ -28,20 +28,20 @@ class Robit():
 
         self.display = pygame.display.set_mode(displayRes, pygame.FULLSCREEN) if ut.getConfig('fullscreen') else pygame.display.set_mode(displayRes)
         pygame.display.set_caption('Robit')
-        pygame.mouse.set_visible(False)
+        pygame.mouse.set_visible(ut.getConfig('showmouse'))
 
         self.fpsClock = pygame.time.Clock()
         self._totalTicks = 0
 
 
         # Animations
-        self._eyeDim = (150,300)
         var = 3*displayRes[0]/16
         self._eyeDim = (var, 2*var)
         self._eyePosL = displayRes[0]/8
         self._eyePosR = displayRes[0] - self._eyePosL - self._eyeDim[0]
 
-        self._iconSize = displayRes[0] / 20
+        self._taskbarIconSize = displayRes[0] / 20
+        self._appIconSize = displayRes[0] / 10
 
         self._blinkFramesLeft = 0
         self._smiling = False
@@ -53,23 +53,64 @@ class Robit():
         self._batteryPercent = 75
         self._internetPercent = 75
 
-        #Menu
+        #Menu Icons
 
-
-        self._icons = {}
-        for image in os.listdir('data/imgs/icons'):
+        self._taskbarIcons = {}
+        for image in os.listdir('data/imgs/icons/taskbar'):
             if image[-4:] == '.png':
-                path = 'data/imgs/icons/' + str(image)
+                path = 'data/imgs/icons/taskbar/' + str(image)
                 img = self.colourise(pygame.image.load(path), ut.getConfig('accentcolour'))
-                img = pygame.transform.scale(img, (self._iconSize,self._iconSize))
-                self._icons[image[:-4]] = img
+                img = pygame.transform.scale(img, (self._taskbarIconSize,self._taskbarIconSize))
+                self._taskbarIcons[image[:-4]] = img
             
-        self._font = pygame.font.Font('data/pixel.otf', 40)
-        self._homeText = self._font.render('Robit Home', True, ut.getConfig('accentcolour'))
+
+        self._appIcons = {}
+        for image in os.listdir('data/imgs/icons/apps'):
+            if image[-4:] == '.png':
+                path = 'data/imgs/icons/apps/' + str(image)
+                img = self.colourise(pygame.image.load(path), ut.getConfig('accentcolour'))
+                img = pygame.transform.scale(img, (self._appIconSize,self._appIconSize))
+                self._appIcons[image[:-4]] = img
+
+
+        # Buttons
+
+        padding = ut.getConfig('menupadding')
+        lineWidth = ut.getConfig('menulinewidth')
+        gapX = ((displayRes[0] - 2*padding-2*lineWidth) - 4 * self._appIconSize) / 5
+        initialX = padding + lineWidth + gapX
+        gapY = ((displayRes[1] -4*padding -self._taskbarIconSize -4*lineWidth) - 2 * self._appIconSize) / 3
+        initialY = 3*padding + 3*lineWidth + self._taskbarIconSize + gapY
+
+        n = 0
+        self.appButtons = {}
+        for i in range(2):
+            for j in range(4):
+                button = pygame.Rect(initialX + j*(gapX+self._appIconSize),initialY + i*(gapY+self._appIconSize),self._appIconSize,self._appIconSize + (self._appIconSize/4))
+                self.appButtons[ut.getConfig('homescreen')[n]] = button
+                n += 1
+        self.appButtons['home'] = pygame.Rect(2*padding+lineWidth,2*padding+lineWidth,self._taskbarIconSize,self._taskbarIconSize)
 
 
 
+        # Text
 
+        titleFont = pygame.font.Font('data/pixel.otf', 40)
+
+        menuTitles = ['Robit Home', 'Settings']
+        menuTexts = []
+        for title in menuTitles:
+            menuTexts.append(titleFont.render(title, True, ut.getConfig('accentcolour')))
+        self._menuTitles = dict(zip(menuTitles, menuTexts))
+
+
+        appFont = pygame.font.Font('data/pixel.otf', 30)
+        appTitles = ut.getConfig('homescreen')
+        appTexts = []
+        for app in self.appButtons:
+            appTexts.append(appFont.render(app, True, ut.getConfig('accentcolour')))
+        self._appTitles = dict(zip(appTitles,appTexts))
+        
 
     def colourise(self, image, newColor):
 
@@ -117,7 +158,7 @@ class Robit():
             self._menuOpenFramesLeft = animationTime
             self._menuOpenDuration = animationTime
         
-        if self._displayScreen == 'menu':
+        if self._displayScreen == 'home':
             self._displayScreen = 'closing'
             self._menuCloseFramesLeft = animationTime
             self._menuCloseDuration = animationTime
@@ -175,7 +216,7 @@ class Robit():
             self._menuOpenFramesLeft -= 1
         elif self._menuOpenFramesLeft > 0:
             # Box up
-            self._handleMenu()
+            self._handleMainMenu()
             backgroundColour = ut.getConfig('backgroundcolour')
             
             grad = (2*lineWidth-(displayHeight-2*padding))/partTime
@@ -194,7 +235,7 @@ class Robit():
 
             self._menuOpenFramesLeft -= 1
         else:
-            self._displayScreen = 'menu'
+            self._displayScreen = 'home'
 
     def _menuCloseAnimation(self):
 
@@ -205,7 +246,7 @@ class Robit():
 
         partTime = self._menuCloseDuration / 3
         if self._menuCloseFramesLeft > 2 * partTime:
-            self._handleMenu()
+            self._handleMainMenu()
             backgroundColour = ut.getConfig('backgroundcolour')
             # Menu close
             grad = ((displayHeight-2*padding)-2*lineWidth)/partTime
@@ -269,6 +310,8 @@ class Robit():
 
         pygame.draw.ellipse(self.display, colour, [self._eyePosL, eyeYOffset, self._eyeDim[0], eyeHeight], 0)
         pygame.draw.ellipse(self.display, colour, [self._eyePosR, rightEyeYOffset ,self._eyeDim[0], rightEyeHeight], 0)
+        #############
+        
 
 
 
@@ -276,9 +319,9 @@ class Robit():
         colour = ut.getConfig('accentcolour')
         if self._smiling:
             pass #Need to pygame.draw a new smile here
+    
 
-
-    def _handleMenu(self):
+    def _handleGeneralMenu(self, title):
         colour = ut.getConfig('accentcolour')
         padding = ut.getConfig('menupadding')
         lineWidth = ut.getConfig('menulinewidth')
@@ -288,27 +331,52 @@ class Robit():
 
         
         insideLine = 2*padding + lineWidth
-        divideLineY = insideLine + self._iconSize + padding
+        divideLineY = insideLine + self._taskbarIconSize + padding
         divideLineX = insideLine
 
         pygame.draw.rect(self.display, colour, [divideLineX, divideLineY, displayWidth-2*divideLineX,2*lineWidth],lineWidth)
         
-        self.display.blit(self._icons['home'], (divideLineX, insideLine))
+        self.display.blit(self._taskbarIcons['home'], (divideLineX, insideLine))
 
-
-        
-
-        self.display.blit(self._icons['battery'+str(self._batteryPercent)], (displayWidth-insideLine-self._iconSize, insideLine))
+        self.display.blit(self._taskbarIcons['battery'+str(self._batteryPercent)], (displayWidth-insideLine-self._taskbarIconSize, insideLine))
         if self._totalTicks % 100 < 50 and self._internetPercent == 0:
-            self.display.blit(self._icons['internet'+str(self._internetPercent)], (displayWidth-insideLine-self._iconSize*2-padding, insideLine))
+            self.display.blit(self._taskbarIcons['internet'+str(self._internetPercent)], (displayWidth-insideLine-self._taskbarIconSize*2-padding, insideLine))
         elif self._internetPercent > 0:
-            self.display.blit(self._icons['internet'+str(self._internetPercent)], (displayWidth-insideLine-self._iconSize*2-padding, insideLine))
+            self.display.blit(self._taskbarIcons['internet'+str(self._internetPercent)], (displayWidth-insideLine-self._taskbarIconSize*2-padding, insideLine))
+
+        self.display.blit(self._menuTitles[title], (insideLine+self._taskbarIconSize+padding, insideLine))
+
+
+    def _handleMainMenu(self):
+        self._handleGeneralMenu('Robit Home')
+
+        self.display.blit(self._appIcons['settings'], self.appButtons['settings'])
         
-        self.display.blit(self._homeText, (insideLine+self._iconSize+padding, insideLine))
+        for app in ut.getConfig('homescreen'):
+            x = self.appButtons[app].centerx
+            y = self.appButtons[app].top
+            rect = self._appTitles[app].get_rect()
+            rect.centerx = x
+            rect.top = y + self._appIconSize
+            self.display.blit(self._appTitles[app], rect)
+
+         
+        
+
+
+    def _handleSettings(self):
+        self._handleGeneralMenu('Settings')
+        
+
+
 
         
-    def _handleClick(mx, my):
-        pass
+    def _handleClick(self, mx, my):
+        
+        for screen, button in self.appButtons.items():
+            if button.collidepoint(mx,my):
+                self._displayScreen = screen
+                
 
         
 
@@ -345,13 +413,27 @@ class Robit():
             self._handleEyes()
             self._handleSmile()
         
-        elif self._displayScreen == 'menu':
-            self._handleMenu()
+        elif self._displayScreen == 'home':
+            self._handleMainMenu()
+
+
+
+
 
         elif self._displayScreen == 'opening':
             self._menuOpenAnimation()
         elif self._displayScreen == 'closing':
             self._menuCloseAnimation()
+        elif self._displayScreen == 'settings':
+            self._handleSettings()
+
+
+        mx, my = pygame.mouse.get_pos()
+        pygame.draw.circle(self.display, 'red', (mx,my), 10)
+
+
+        
+        
 
 
         # After all
