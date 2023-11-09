@@ -13,7 +13,7 @@ robit = Robit()
 if __name__ == '__main__':
 
     looping = True
-
+    mousedown = False
 
 
     while looping:
@@ -43,13 +43,18 @@ if __name__ == '__main__':
                 if event.key == pygame.K_DOWN and robit._batteryPercent - 25 >= 0:
                     robit._batteryPercent -= 25
                     robit._internetPercent -= 25
-                
+                if event.key == pygame.K_j:
+                    robit.listen()
 
 
 
 
-            if event.type == pygame.MOUSEBUTTONDOWN:
+            if event.type == pygame.MOUSEBUTTONDOWN or mousedown == True:
                 robit._handleClick(mx, my)
+                mousedown = True
+
+            if event.type == pygame.MOUSEBUTTONUP:
+                mousedown = False
 
 
     

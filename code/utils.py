@@ -30,3 +30,8 @@ def getConfig(*keys):
             return eval(config['SETTINGS'][str(key)])
         
 
+def getDefaultConfig(key):
+    if key in config['DEFAULT']:
+        return eval(config['DEFAULT'][str(key)])
+        
+

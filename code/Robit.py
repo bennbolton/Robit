@@ -2,7 +2,10 @@ import pygame
 from random import randint
 from math import pi
 import os
+import speech_recognition as sr
+
 import utils as ut
+
 
 class Robit():
     
@@ -54,6 +57,7 @@ class Robit():
         self._internetPercent = 75
 
         #Menu Icons
+        
 
         self._taskbarIcons = {}
         for image in os.listdir('data/imgs/icons/taskbar'):
@@ -71,7 +75,12 @@ class Robit():
                 img = self.colourise(pygame.image.load(path), ut.getConfig('accentcolour'))
                 img = pygame.transform.scale(img, (self._appIconSize,self._appIconSize))
                 self._appIcons[image[:-4]] = img
+        #Temp null
+        for i in range(7):
+            pic = pygame.image.load('data/imgs/icons/apps/settings.png')
+            self._appIcons[f'null{i+1}'] = pygame.transform.scale(pic, (self._appIconSize,self._appIconSize))
 
+        self._currentColour = ut.getConfig('accentcolour')
 
         # Buttons
 
@@ -82,15 +91,17 @@ class Robit():
         gapY = ((displayRes[1] -4*padding -self._taskbarIconSize -4*lineWidth) - 2 * self._appIconSize) / 3
         initialY = 3*padding + 3*lineWidth + self._taskbarIconSize + gapY
 
-        n = 0
         self.appButtons = {}
-        for i in range(2):
-            for j in range(4):
-                button = pygame.Rect(initialX + j*(gapX+self._appIconSize),initialY + i*(gapY+self._appIconSize),self._appIconSize,self._appIconSize + (self._appIconSize/4))
-                self.appButtons[ut.getConfig('homescreen')[n]] = button
-                n += 1
+        for n, app in enumerate(ut.getConfig('homescreen')):
+            button = pygame.Rect(initialX + (n%4)*(gapX+self._appIconSize), initialY + (n//4)*(gapY+self._appIconSize), self._appIconSize,self._appIconSize + (self._appIconSize/4))
+            self.appButtons[app] = button
         self.appButtons['home'] = pygame.Rect(2*padding+lineWidth,2*padding+lineWidth,self._taskbarIconSize,self._taskbarIconSize)
 
+
+        #Settings Menu
+        self._settingsSlidersPos = [ut.getConfig('accentcolour')[i] for i in range(3)]
+        self._settingsSliders = [pygame.Rect(50, 175 + col*50, 255,10) for col in range(3)]
+        self._settingsButtons = [pygame.Rect(400,175,50,50)]
 
 
         # Text
@@ -110,6 +121,7 @@ class Robit():
         for app in self.appButtons:
             appTexts.append(appFont.render(app, True, ut.getConfig('accentcolour')))
         self._appTitles = dict(zip(appTitles,appTexts))
+
         
 
     def colourise(self, image, newColor):
@@ -123,6 +135,21 @@ class Robit():
 
             return image
 
+    def listen(self):
+        r = sr.Recognizer()
+        with sr.Microphone() as source:
+            print('Listening....')
+            r.pause_threshold = 1
+            audio = r.listen(source)    
+        try:
+            print('Recognizing...')
+            query = r.recognize_google(audio, language='en-gb')
+            print(query)
+        except Exception:
+            self.say('Sorry, I could not understand. Could you please say that again?')
+            query = None
+        return query
+    
 
     def changeColour(self, colour: tuple):
         '''Use to change the main colour of all aspects of the display'''
@@ -349,8 +376,6 @@ class Robit():
 
     def _handleMainMenu(self):
         self._handleGeneralMenu('Robit Home')
-
-        self.display.blit(self._appIcons['settings'], self.appButtons['settings'])
         
         for app in ut.getConfig('homescreen'):
             x = self.appButtons[app].centerx
@@ -360,28 +385,59 @@ class Robit():
             rect.top = y + self._appIconSize
             self.display.blit(self._appTitles[app], rect)
 
+            self.display.blit(self._appIcons[app], self.appButtons[app])
+
          
         
 
 
     def _handleSettings(self):
         self._handleGeneralMenu('Settings')
-        
+        self._handleSlider()
+
+        for button in self._settingsButtons:
+            pygame.draw.rect(self.display, 'red', button, width=0)
 
 
 
         
     def _handleClick(self, mx, my):
-        
-        for screen, button in self.appButtons.items():
-            if button.collidepoint(mx,my):
-                self._displayScreen = screen
+        if self.appButtons['home'].collidepoint(mx,my):
+            self._displayScreen = 'home'
+
+        if self._displayScreen == 'home':
+            for screen, button in self.appButtons.items():
+                if button.collidepoint(mx,my):
+                    self._displayScreen = screen
                 
+        if self._displayScreen == 'settings':
+            for i, slider in enumerate(self._settingsSliders):
+                if slider.collidepoint(mx,my):
+                    self._settingsSlidersPos[i] = mx
+                    num = mx - slider.left
+                    colourCopy = list(ut.getConfig('accentcolour'))
+                    colourCopy[i] = num
+                    ut.updateConfig(accentcolour=tuple(colourCopy))
+            for button in self._settingsButtons:
+                if button.collidepoint(mx, my):
+                    ut.updateConfig(accentcolour=ut.getDefaultConfig('accentcolour'))
+                    for i,slider in enumerate(self._settingsSliders):
+                        self._settingsSlidersPos[i] = ut.getDefaultConfig('accentcolour')[i] + slider.left
+                    
 
         
 
 
+    def _handleSlider(self):
+        if self._displayScreen == 'settings':
+            for col in range(3):
+                colour = list(ut.getConfig('accentcolour'))
+                for i in range(255):
+                    colour[col] = i
+                    pygame.draw.rect(self.display, tuple(colour), [50+i, 175 + col*50, 1, 10], 0)
 
+                pygame.draw.circle(self.display, ut.getConfig('accentcolour'), (self._settingsSlidersPos[col], 175 + col*50 +5), 12,0)
+                pygame.draw.circle(self.display, 'grey', (self._settingsSlidersPos[col], 175 + col*50 +5), 9,0)
 
 
     def _randomBlink(self):
@@ -392,10 +448,26 @@ class Robit():
                 self._nextRandomBlink = randint(200, 2000)
                 self._lastBlink = 0
 
+    def _updateColours(self, accentColour):
+        for img in self._appIcons:
+            self._appIcons[img] = self.colourise(self._appIcons[img], accentColour)
+        for img in self._taskbarIcons:
+            self._taskbarIcons[img] = self.colourise(self._taskbarIcons[img], accentColour)
+        for text in self._menuTitles:
+            self._menuTitles[text] = self.colourise(self._menuTitles[text], accentColour)
+        for text in self._appTitles:
+            self._appTitles[text] = self.colourise(self._appTitles[text], accentColour)
+        self._currentColour = accentColour
+
 
 
     def update(self):
         '''Updates the display. To be called at the end of every game loop'''
+
+        accentColour = ut.getConfig('accentcolour')
+        if self._currentColour != accentColour:
+            self._updateColours(accentColour)
+
 
 
         #Ambience
