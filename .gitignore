@@ -2,3 +2,6 @@ code/testing.py
 code/data/imgs/.DS_Store
 code/data/imgs/icons/.DS_Store
 code/data/.DS_Store
+__pycache__
+.hypothesis
+.DS_Store

@@ -500,9 +500,6 @@ class Robit():
             self._handleSettings()
 
 
-        mx, my = pygame.mouse.get_pos()
-        pygame.draw.circle(self.display, 'red', (mx,my), 10)
-
 
         
         
