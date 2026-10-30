@@ -1,9 +1,10 @@
 from apps.app import App, PlaceholderApp
 from apps.settings import SettingsApp
+from apps.music import MusicApp
 
 
 # Every app that can be put on the home screen, by the name used in the homescreen config list
-APPS = {cls.name: cls for cls in [SettingsApp]}
+APPS = {cls.name: cls for cls in [SettingsApp, MusicApp]}
 
 
 def createApp(name, ui):

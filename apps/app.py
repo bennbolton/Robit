@@ -11,6 +11,7 @@ class App():
 
         Hooks (all optional apart from draw):
             draw(surface, rect)     draw the app inside rect, below the taskbar. Called every frame while open
+            update()                called every frame whether the app is open or not, for background work
             handleEvent(event)      pygame events while the app is open. Mouse positions are screen coordinates
             onOpen()                the app has just been opened from the home screen
             onClose()               the app is being left, either back to home or by the menu closing
@@ -39,6 +40,9 @@ class App():
 
     def draw(self, surface, rect):
         raise NotImplementedError
+
+    def update(self):
+        pass
 
     def handleEvent(self, event):
         pass

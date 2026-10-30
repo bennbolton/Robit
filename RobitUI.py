@@ -165,6 +165,9 @@ class RobitUI():
         if ut.getConfig('ambientblink'):
             self._randomBlink()
 
+        for app in self.apps:
+            app.update()
+
         self.display.fill(ut.getConfig('backgroundcolour'))
 
         if self._screen == 'face':
