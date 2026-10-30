@@ -1,516 +1,405 @@
-import pygame
-from random import randint
-from math import pi
 import os
+from random import randint, uniform
 
+import pygame
 
 import utils as ut
 
 
+BASEDIR = os.path.dirname(os.path.abspath(__file__))
+IMGDIR = os.path.join(BASEDIR, 'data', 'imgs', 'icons')
+FONTPATH = os.path.join(BASEDIR, 'data', 'pixel.otf')
+
+SLIDERX = 50
+SLIDERY = 175
+SLIDERGAP = 50
+SLIDERWIDTH = 256  # one pixel per colour value, 0-255
+SLIDERHEIGHT = 10
+
+
+def now():
+    '''Seconds since pygame.init()'''
+    return pygame.time.get_ticks() / 1000
+
+
+def lerp(start, end, t):
+    return start + (end - start) * t
+
+
+def colourise(image, colour):
+    '''Returns a copy of image with every pixel set to colour, keeping the alpha'''
+    image = image.copy()
+    image.fill((0, 0, 0, 255), None, pygame.BLEND_RGBA_MULT)
+    image.fill(tuple(colour[:3]) + (0,), None, pygame.BLEND_RGBA_ADD)
+    return image
+
+
+def loadIcons(folder, size, colour):
+    icons = {}
+    for name in os.listdir(folder):
+        if name.endswith('.png'):
+            img = pygame.image.load(os.path.join(folder, name))
+            img = pygame.transform.scale(img, (size, size))
+            icons[name[:-4]] = colourise(img, colour)
+    return icons
+
+
+class Animation():
+    '''Tracks progress through a fixed length of real time, independent of frame rate'''
+
+    def __init__(self, duration):
+        self.start = now()
+        self.duration = duration
+
+    @property
+    def progress(self):
+        '''0 at the start, 1 once the duration has passed'''
+        return min(1, (now() - self.start) / self.duration)
+
+    @property
+    def done(self):
+        return self.progress >= 1
+
+    def phase(self, count):
+        '''Splits the animation into equal phases. Returns (phase index, progress within that phase)'''
+        scaled = self.progress * count
+        index = min(int(scaled), count - 1)
+        return index, scaled - index
+
+
 class RobitUI():
-    
-    
+
     def __init__(self, **kwargs):
         '''Initialise with kwargs to update settings from beginning.
-            
-            Key words available are: 
-            
+
+            Key words available are:
+
             displayres ;
             displayfps ;
-            fullscreeen ;
+            fullscreen ;
             showmouse ;
             accentcolour ;
             backgroundcolour ;
-            menupad ;
-            menulinethickness ;
+            menupadding ;
+            menulinewidth ;
             ambientblink'''
-        
+
         ut.updateConfig(**kwargs)
 
-        displayRes = ut.getConfig('displayres')
+        self.displayRes = ut.getConfig('displayres')
+        self.width, self.height = self.displayRes
+        self.padding = ut.getConfig('menupadding')
+        self.lineWidth = ut.getConfig('menulinewidth')
+        self.fps = ut.getConfig('displayfps')
+        self.homescreen = ut.getConfig('homescreen')
+        self.accent = ut.getConfig('accentcolour')
 
-        self.display = pygame.display.set_mode(displayRes, pygame.FULLSCREEN) if ut.getConfig('fullscreen') else pygame.display.set_mode(displayRes)
+        flags = pygame.FULLSCREEN if ut.getConfig('fullscreen') else 0
+        self.display = pygame.display.set_mode(self.displayRes, flags)
         pygame.display.set_caption('Robit')
         pygame.mouse.set_visible(ut.getConfig('showmouse'))
+        self.clock = pygame.time.Clock()
 
-        self.fpsClock = pygame.time.Clock()
-        self._totalTicks = 0
+        self.batteryPercent = 75
+        self.internetPercent = 75
 
+        # Face
+        eyeWidth = 3 * self.width / 16
+        self._eyeDim = (eyeWidth, 2 * eyeWidth)
+        self._eyePosL = self.width / 8
+        self._eyePosR = self.width - self._eyePosL - eyeWidth
 
-        # Animations
-        var = 3*displayRes[0]/16
-        self._eyeDim = (var, 2*var)
-        self._eyePosL = displayRes[0]/8
-        self._eyePosR = displayRes[0] - self._eyePosL - self._eyeDim[0]
-
-        self._taskbarIconSize = displayRes[0] / 20
-        self._appIconSize = displayRes[0] / 10
-
-        self._blinkFramesLeft = 0
-        self._smiling = False
+        self._screen = 'face'
+        self._blink = None
         self._winking = False
-        self._displayScreen = 'face'
-        self._lastBlink = 0
-        self._nextRandomBlink = 300
+        self._smiling = False
+        self._nextRandomBlink = now() + uniform(3, 30)
+        self._menuAnim = None
 
-        self._batteryPercent = 75
-        self._internetPercent = 75
+        # Icons
+        self._taskbarIconSize = self.width / 20
+        self._appIconSize = self.width / 10
 
-        #Menu Icons
-        
+        self._taskbarIcons = loadIcons(os.path.join(IMGDIR, 'taskbar'), self._taskbarIconSize, self.accent)
+        self._appIcons = loadIcons(os.path.join(IMGDIR, 'apps'), self._appIconSize, self.accent)
+        for app in self.homescreen:
+            # Placeholder icon for apps that don't have one yet
+            self._appIcons.setdefault(app, self._appIcons['settings'])
 
-        self._taskbarIcons = {}
-        for image in os.listdir('data/imgs/icons/taskbar'):
-            if image[-4:] == '.png':
-                path = 'data/imgs/icons/taskbar/' + str(image)
-                img = self.colourise(pygame.image.load(path), ut.getConfig('accentcolour'))
-                img = pygame.transform.scale(img, (self._taskbarIconSize,self._taskbarIconSize))
-                self._taskbarIcons[image[:-4]] = img
-            
-
-        self._appIcons = {}
-        for image in os.listdir('data/imgs/icons/apps'):
-            if image[-4:] == '.png':
-                path = 'data/imgs/icons/apps/' + str(image)
-                img = self.colourise(pygame.image.load(path), ut.getConfig('accentcolour'))
-                img = pygame.transform.scale(img, (self._appIconSize,self._appIconSize))
-                self._appIcons[image[:-4]] = img
-        #Temp null
-        for i in range(7):
-            pic = pygame.image.load('data/imgs/icons/apps/settings.png')
-            self._appIcons[f'null{i+1}'] = pygame.transform.scale(pic, (self._appIconSize,self._appIconSize))
-
-        self._currentColour = ut.getConfig('accentcolour')
-
-        # Buttons
-
-        padding = ut.getConfig('menupadding')
-        lineWidth = ut.getConfig('menulinewidth')
-        gapX = ((displayRes[0] - 2*padding-2*lineWidth) - 4 * self._appIconSize) / 5
-        initialX = padding + lineWidth + gapX
-        gapY = ((displayRes[1] -4*padding -self._taskbarIconSize -4*lineWidth) - 2 * self._appIconSize) / 3
-        initialY = 3*padding + 3*lineWidth + self._taskbarIconSize + gapY
+        # Home screen buttons, in a 4x2 grid
+        inner = self.padding + self.lineWidth
+        gapX = (self.width - 2 * inner - 4 * self._appIconSize) / 5
+        gapY = (self.height - 4 * self.padding - 4 * self.lineWidth - self._taskbarIconSize - 2 * self._appIconSize) / 3
+        startX = inner + gapX
+        startY = 3 * inner + self._taskbarIconSize + gapY
 
         self.appButtons = {}
-        for n, app in enumerate(ut.getConfig('homescreen')):
-            button = pygame.Rect(initialX + (n%4)*(gapX+self._appIconSize), initialY + (n//4)*(gapY+self._appIconSize), self._appIconSize,self._appIconSize + (self._appIconSize/4))
-            self.appButtons[app] = button
-        self.appButtons['home'] = pygame.Rect(2*padding+lineWidth,2*padding+lineWidth,self._taskbarIconSize,self._taskbarIconSize)
+        for n, app in enumerate(self.homescreen):
+            x = startX + (n % 4) * (gapX + self._appIconSize)
+            y = startY + (n // 4) * (gapY + self._appIconSize)
+            self.appButtons[app] = pygame.Rect(x, y, self._appIconSize, self._appIconSize * 1.25)
+        self.homeButton = pygame.Rect(2 * self.padding + self.lineWidth, 2 * self.padding + self.lineWidth,
+                                      self._taskbarIconSize, self._taskbarIconSize)
 
-
-        #Settings Menu
-        self._settingsSlidersPos = [ut.getConfig('accentcolour')[i] for i in range(3)]
-        self._settingsSliders = [pygame.Rect(50, 175 + col*50, 255,10) for col in range(3)]
-        self._settingsButtons = [pygame.Rect(400,175,50,50)]
+        # Settings
+        self._sliders = [pygame.Rect(SLIDERX, SLIDERY + i * SLIDERGAP, SLIDERWIDTH, SLIDERHEIGHT) for i in range(3)]
+        self._resetButton = pygame.Rect(400, 175, 50, 50)
         self._sliderGradients = [None, None, None]
         self._sliderGradientKeys = [None, None, None]
         self._draggingSlider = None
 
-
         # Text
+        titleFont = pygame.font.Font(FONTPATH, 40)
+        appFont = pygame.font.Font(FONTPATH, 30)
+        self._menuTitles = {title: titleFont.render(title, True, self.accent) for title in ['Robit Home', 'Settings']}
+        self._appTitles = {app: appFont.render(app, True, self.accent) for app in self.homescreen}
 
-        titleFont = pygame.font.Font('data/pixel.otf', 40)
+        # Every screen that can be shown, and the method that draws it
+        self._screens = {
+            'face': self._drawFace,
+            'opening': self._drawMenuOpening,
+            'closing': self._drawMenuClosing,
+            'home': self._drawHome,
+            'settings': self._drawSettings,
+        }
 
-        menuTitles = ['Robit Home', 'Settings']
-        menuTexts = []
-        for title in menuTitles:
-            menuTexts.append(titleFont.render(title, True, ut.getConfig('accentcolour')))
-        self._menuTitles = dict(zip(menuTitles, menuTexts))
+    # ----- Public controls -----
 
-
-        appFont = pygame.font.Font('data/pixel.otf', 30)
-        appTitles = ut.getConfig('homescreen')
-        appTexts = []
-        for app in self.appButtons:
-            appTexts.append(appFont.render(app, True, ut.getConfig('accentcolour')))
-        self._appTitles = dict(zip(appTitles,appTexts))
-
-        
-
-    def colourise(self, image, newColor):
-
-            image = image.copy()
-
-            # zero out RGB values
-            image.fill((0, 0, 0, 255), None, pygame.BLEND_RGBA_MULT)
-            # add in new RGB values
-            image.fill(newColor[0:3] + (0,), None, pygame.BLEND_RGBA_ADD)
-
-            return image
-
-    
-
-    def changeColour(self, colour: tuple):
+    def changeColour(self, colour):
         '''Use to change the main colour of all aspects of the display'''
-        ut.updateConfig(accentcolour=colour)
+        self._setAccent(colour)
+        ut.updateConfig(accentcolour=self.accent)
 
-        
     def changeBackground(self, background):
         '''Use to change the background colour of the display'''
-        ut.updateConfig(backgroundColour=background)
-    
+        ut.updateConfig(backgroundcolour=background)
 
-    def blink(self,duration=15, wink=False):
-        '''Triggers a simple blink of the eyes. Set wink=True to make the blink a wink instead'''
-        if self._blinkFramesLeft == 0 and self._displayScreen == 'face':
-            self._blinkFramesLeft = duration
-            self._blinkDuration = duration
-            if wink:
-                self._winking = True
-            else:
-                self._winking = False
+    def blink(self, duration=0.25, wink=False):
+        '''Triggers a simple blink of the eyes, duration in seconds. Set wink=True to make the blink a wink instead'''
+        if self._blink is None and self._screen == 'face':
+            self._blink = Animation(duration)
+            self._winking = wink
 
     def toggleSmile(self):
         '''Toggles whether the mouth is visible or not. (Not Currently available)'''
-        if self._displayScreen == 'face':
+        if self._screen == 'face':
             self._smiling = not self._smiling
 
-
-    def toggleMenu(self, animationTime=60):
-        '''Changes the current screen being shown. Current arguments taken are 'face' '''
-
-        if self._displayScreen == 'face':
-            self._displayScreen = 'opening'
-            self._menuOpenFramesLeft = animationTime
-            self._menuOpenDuration = animationTime
-        
-        if self._displayScreen == 'home':
-            self._displayScreen = 'closing'
-            self._menuCloseFramesLeft = animationTime
-            self._menuCloseDuration = animationTime
-
-
-    def _menuOpenAnimation(self):
-        
-        colour = ut.getConfig('accentcolour')
-        padding = ut.getConfig('menupadding')
-        lineWidth = ut.getConfig('menulinewidth')
-        displayWidth, displayHeight = ut.getConfig('displayres')
-
-        partTime = self._menuOpenDuration / 3
-        if self._menuOpenFramesLeft > 2 * partTime:
-            # Eye Close
-            grad = (self._eyeDim[1] - (2*lineWidth)) / (partTime)
-
-            intercept = (self._menuOpenDuration * grad) - self._eyeDim[1]
-
-        
-            eyeHeight = grad * self._menuOpenFramesLeft - intercept
-            eyeYOffset = (displayHeight-eyeHeight)/2
-
-            pygame.draw.ellipse(self.display, colour, [self._eyePosL,eyeYOffset,self._eyeDim[0],eyeHeight], 0)
-            pygame.draw.ellipse(self.display, colour, [self._eyePosR,eyeYOffset,self._eyeDim[0],eyeHeight], 0)
-
-
-            self._menuOpenFramesLeft -= 1
-
-
-        elif self._menuOpenFramesLeft > partTime:
-            # Line Extend
-
-
-            Yrect = (displayHeight - 2*lineWidth) / 2
-
-
-            grad = (self._eyeDim[0] - (displayWidth/2)-padding) / partTime
-            intercept = (displayWidth/2)-padding - grad * partTime
-
-            length = grad * self._menuOpenFramesLeft + intercept
-
-
-            posGrad = (self._eyePosL-padding)/partTime
-            posIntercept = padding - posGrad*partTime
-
-
-            XLOffset = posGrad*self._menuOpenFramesLeft + posIntercept
-            XROffset = displayWidth - XLOffset - length
-      
-
-            pygame.draw.rect(self.display, colour, [XLOffset, Yrect, length, 2*lineWidth], lineWidth)
-            pygame.draw.rect(self.display, colour, [XROffset, Yrect, length, 2*lineWidth], lineWidth)
-
-            self._menuOpenFramesLeft -= 1
-        elif self._menuOpenFramesLeft > 0:
-            # Box up
-            self._handleMainMenu()
-            backgroundColour = ut.getConfig('backgroundcolour')
-            
-            grad = (2*lineWidth-(displayHeight-2*padding))/partTime
-            intercept = displayHeight-2*padding
-            
-            height = grad * self._menuOpenFramesLeft + intercept
-            
-            YOffset = (displayHeight-height)/2
-
-
-            pygame.draw.rect(self.display, backgroundColour, [0,0, displayWidth, YOffset], 0)
-            pygame.draw.rect(self.display, backgroundColour, [0,(YOffset+height), displayWidth, YOffset], 0)
-
-
-            pygame.draw.rect(self.display, colour, [padding, YOffset, (displayWidth-2*padding), height], lineWidth)
-
-            self._menuOpenFramesLeft -= 1
-        else:
-            self._displayScreen = 'home'
-
-    def _menuCloseAnimation(self):
-
-        colour = ut.getConfig('accentcolour')
-        padding = ut.getConfig('menupadding')
-        lineWidth = ut.getConfig('menulinewidth')
-        displayWidth, displayHeight = ut.getConfig('displayres')
-
-        partTime = self._menuCloseDuration / 3
-        if self._menuCloseFramesLeft > 2 * partTime:
-            self._handleMainMenu()
-            backgroundColour = ut.getConfig('backgroundcolour')
-            # Menu close
-            grad = ((displayHeight-2*padding)-2*lineWidth)/partTime
-            intercept = -(grad*self._menuCloseDuration - (displayHeight-2*padding))
-            height = grad * self._menuCloseFramesLeft + intercept
-
-            YOffset = (displayHeight-height)/2
-
-            pygame.draw.rect(self.display, backgroundColour, [0,0, displayWidth, YOffset], 0)
-            pygame.draw.rect(self.display, backgroundColour, [0,(YOffset+height), displayWidth, YOffset], 0)
-
-            pygame.draw.rect(self.display, colour, [padding, YOffset, (displayWidth-2*padding), height], lineWidth)
-
-            self._menuCloseFramesLeft -=1
-        
-        elif self._menuCloseFramesLeft > partTime:
-            fraction = (self._menuCloseFramesLeft - partTime)/ partTime
-
-            length = fraction * (displayWidth-2*padding)
-            Xpos = (displayWidth - length)/2
-            Ypos = (displayHeight - lineWidth*2)/2
-
-            pygame.draw.rect(self.display, colour, [Xpos, Ypos, length, 2*lineWidth], lineWidth)
-
-            self._menuCloseFramesLeft -=1
-
-        elif self._menuCloseFramesLeft > 0:
-            fraction = 1 - (self._menuCloseFramesLeft / partTime)
-            height = self._eyeDim[1] * fraction
-            YOffset = (displayHeight - height) / 2
-
-            pygame.draw.ellipse(self.display, colour, [self._eyePosL, YOffset, self._eyeDim[0], height], 0)
-            pygame.draw.ellipse(self.display, colour, [self._eyePosR, YOffset, self._eyeDim[0], height], 0)
-
-            self._menuCloseFramesLeft -= 1
-
-        else:
-            self._displayScreen = 'face'
-
-    def _handleEyes(self):
-        displayWidth, displayHeight = ut.getConfig('displayres')
-        if self._blinkFramesLeft > 0:
-            blinkFraction = abs((self._blinkFramesLeft-(self._blinkDuration/2))/(self._blinkDuration/2))
-            rightEyeHeight = eyeHeight = blinkFraction * self._eyeDim[1]
-            rightEyeYOffset = eyeYOffset = (displayHeight-eyeHeight)/2
-            self._blinkFramesLeft -= 1
-        else:
-            rightEyeHeight = eyeHeight = self._eyeDim[1]
-            rightEyeYOffset = eyeYOffset = (displayHeight - self._eyeDim[1]) / 2
-            
-
-        if self._winking:
-            rightEyeYOffset = (displayHeight - self._eyeDim[1]) / 2
-            rightEyeHeight = self._eyeDim[1]
-
-
-
-        colour = ut.getConfig('accentcolour')
-
-
-
-        pygame.draw.ellipse(self.display, colour, [self._eyePosL, eyeYOffset, self._eyeDim[0], eyeHeight], 0)
-        pygame.draw.ellipse(self.display, colour, [self._eyePosR, rightEyeYOffset ,self._eyeDim[0], rightEyeHeight], 0)
-        #############
-        
-
-
-
-    def _handleSmile(self):
-        colour = ut.getConfig('accentcolour')
-        if self._smiling:
-            pass #Need to pygame.draw a new smile here
-    
-
-    def _handleGeneralMenu(self, title):
-        colour = ut.getConfig('accentcolour')
-        padding = ut.getConfig('menupadding')
-        lineWidth = ut.getConfig('menulinewidth')
-        displayWidth, displayHeight = ut.getConfig('displayres')
-            
-        pygame.draw.rect(self.display, colour, [padding, padding, displayWidth-(2*padding),displayHeight-(2*padding)], lineWidth)
-
-        
-        insideLine = 2*padding + lineWidth
-        divideLineY = insideLine + self._taskbarIconSize + padding
-        divideLineX = insideLine
-
-        pygame.draw.rect(self.display, colour, [divideLineX, divideLineY, displayWidth-2*divideLineX,2*lineWidth],lineWidth)
-        
-        self.display.blit(self._taskbarIcons['home'], (divideLineX, insideLine))
-
-        self.display.blit(self._taskbarIcons['battery'+str(self._batteryPercent)], (displayWidth-insideLine-self._taskbarIconSize, insideLine))
-        if self._totalTicks % 100 < 50 and self._internetPercent == 0:
-            self.display.blit(self._taskbarIcons['internet'+str(self._internetPercent)], (displayWidth-insideLine-self._taskbarIconSize*2-padding, insideLine))
-        elif self._internetPercent > 0:
-            self.display.blit(self._taskbarIcons['internet'+str(self._internetPercent)], (displayWidth-insideLine-self._taskbarIconSize*2-padding, insideLine))
-
-        self.display.blit(self._menuTitles[title], (insideLine+self._taskbarIconSize+padding, insideLine))
-
-
-    def _handleMainMenu(self):
-        self._handleGeneralMenu('Robit Home')
-        
-        for app in ut.getConfig('homescreen'):
-            x = self.appButtons[app].centerx
-            y = self.appButtons[app].top
-            rect = self._appTitles[app].get_rect()
-            rect.centerx = x
-            rect.top = y + self._appIconSize
-            self.display.blit(self._appTitles[app], rect)
-
-            self.display.blit(self._appIcons[app], self.appButtons[app])
-
-         
-        
-
-
-    def _handleSettings(self):
-        self._handleGeneralMenu('Settings')
-        self._handleSlider()
-
-        for button in self._settingsButtons:
-            pygame.draw.rect(self.display, 'red', button, width=0)
-
-
-
-        
-    def _handleClick(self, mx, my):
-        if self._displayScreen != 'face':
-            if self.appButtons['home'].collidepoint(mx,my):
-                self._displayScreen = 'home'
-
-        if self._displayScreen == 'home':
-            for screen, button in self.appButtons.items():
-                if button.collidepoint(mx,my):
-                    self._displayScreen = screen
-                
-        if self._displayScreen == 'settings':
-            if self._draggingSlider is None:
-                for i, slider in enumerate(self._settingsSliders):
-                    if slider.inflate(0, 30).collidepoint(mx, my):
-                        self._draggingSlider = i
-                        break
-            if self._draggingSlider is not None:
-                i = self._draggingSlider
-                slider = self._settingsSliders[i]
-                num = max(0, min(slider.width - 1, mx - slider.left))
-                self._settingsSlidersPos[i] = slider.left + num
-                colourCopy = list(ut.getConfig('accentcolour'))
-                colourCopy[i] = num
-                ut.updateConfig(accentcolour=tuple(colourCopy))
-
-            if self._draggingSlider is None:
-                for button in self._settingsButtons:
-                    if button.collidepoint(mx, my):
-                        ut.updateConfig(accentcolour=ut.getDefaultConfig('accentcolour'))
-                        for i,slider in enumerate(self._settingsSliders):
-                            self._settingsSlidersPos[i] = ut.getDefaultConfig('accentcolour')[i] + slider.left
-
-        if not pygame.mouse.get_pressed()[0]:
+    def toggleMenu(self, duration=1.0):
+        '''Opens the menu from the face, or closes it back to the face. duration in seconds'''
+        if self._screen == 'face':
+            self._screen = 'opening'
+            self._menuAnim = Animation(duration)
+        elif self._screen in ('home', 'settings'):
+            self._screen = 'closing'
+            self._menuAnim = Animation(duration)
+
+    def handleEvent(self, event):
+        '''Pass every pygame mouse event in here'''
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            self._handleClick(*event.pos)
+        elif event.type == pygame.MOUSEMOTION and self._draggingSlider is not None:
+            self._dragSlider(event.pos[0])
+        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1 and self._draggingSlider is not None:
             self._draggingSlider = None
-                    
-
-        
-    def _getSliderGradient(self, col, accent):
-        key = tuple(c for j,c in enumerate(accent[:3]) if j != col)
-
-        if self._sliderGradientKeys[col] != key:
-            surf = pygame.Surface((255, 10)).convert()
-            colour = list(accent[:3])
-            for i in range(255):
-                colour[col] = i
-                pygame.draw.line(surf, colour, (i, 0), (i, 9))
-            self._sliderGradients[col] = surf
-            self._sliderGradientKeys[col] = key
-
-        return self._sliderGradients[col]
-
-    def _handleSlider(self):
-        if self._displayScreen == 'settings':
-            accent = ut.getConfig('accentcolour')
-            for col in range(3):
-                self.display.blit(self._getSliderGradient(col, accent), (50, 175 + col*50))
-                pygame.draw.circle(self.display, accent, (self._settingsSlidersPos[col], 175 + col*50 + 5), 12, 0)
-                pygame.draw.circle(self.display, 'grey', (self._settingsSlidersPos[col], 175 + col*50 + 5), 9, 0)
-
-    def _randomBlink(self):
-        if self._blinkFramesLeft == 0:
-            self._lastBlink += 1
-            if self._lastBlink == self._nextRandomBlink:
-                self.blink(wink=(randint(0,19)==1))
-                self._nextRandomBlink = randint(200, 2000)
-                self._lastBlink = 0
-
-    def _updateColours(self, accentColour):
-        for img in self._appIcons:
-            self._appIcons[img] = self.colourise(self._appIcons[img], accentColour)
-        for img in self._taskbarIcons:
-            self._taskbarIcons[img] = self.colourise(self._taskbarIcons[img], accentColour)
-        for text in self._menuTitles:
-            self._menuTitles[text] = self.colourise(self._menuTitles[text], accentColour)
-        for text in self._appTitles:
-            self._appTitles[text] = self.colourise(self._appTitles[text], accentColour)
-        self._currentColour = accentColour
-
-
+            # Only save once the drag ends, rather than writing the file on every movement
+            ut.updateConfig(accentcolour=self.accent)
 
     def update(self):
         '''Updates the display. To be called at the end of every game loop'''
-
-        accentColour = ut.getConfig('accentcolour')
-        if self._currentColour != accentColour:
-            self._updateColours(accentColour)
-
-
-
-        #Ambience
         if ut.getConfig('ambientblink'):
             self._randomBlink()
 
-
-
-        # Fill Background
         self.display.fill(ut.getConfig('backgroundcolour'))
+        self._screens[self._screen]()
 
-
-        # Handle display
-        if self._displayScreen == 'face':
-            self._handleEyes()
-            self._handleSmile()
-        
-        elif self._displayScreen == 'home':
-            self._handleMainMenu()
-
-
-        elif self._displayScreen == 'opening':
-            self._menuOpenAnimation()
-        elif self._displayScreen == 'closing':
-            self._menuCloseAnimation()
-        elif self._displayScreen == 'settings':
-            self._handleSettings()
-
-
-
-
-        # After all
         pygame.display.update()
-        self._totalTicks +=1
-        self.fpsClock.tick(ut.getConfig('displayfps'))
+        self.clock.tick(self.fps)
 
-    
+    # ----- Input -----
+
+    def _handleClick(self, mx, my):
+        if self._screen in ('home', 'settings') and self.homeButton.collidepoint(mx, my):
+            self._screen = 'home'
+
+        elif self._screen == 'home':
+            for app, button in self.appButtons.items():
+                # Only apps with a screen to draw can be opened
+                if button.collidepoint(mx, my) and app in self._screens:
+                    self._screen = app
+
+        elif self._screen == 'settings':
+            for i, slider in enumerate(self._sliders):
+                if slider.inflate(0, 30).collidepoint(mx, my):
+                    self._draggingSlider = i
+                    self._dragSlider(mx)
+                    return
+            if self._resetButton.collidepoint(mx, my):
+                self.changeColour(ut.getDefaultConfig('accentcolour'))
+
+    def _dragSlider(self, mx):
+        slider = self._sliders[self._draggingSlider]
+        value = max(0, min(255, mx - slider.left))
+        colour = list(self.accent)
+        colour[self._draggingSlider] = value
+        self._setAccent(colour)
+
+    def _setAccent(self, colour):
+        colour = tuple(colour[:3])
+        if colour == self.accent:
+            return
+        self.accent = colour
+        # colourise keeps the alpha, so the already rendered surfaces can be recoloured in place
+        for surfaces in (self._appIcons, self._taskbarIcons, self._menuTitles, self._appTitles):
+            for key in surfaces:
+                surfaces[key] = colourise(surfaces[key], colour)
+
+    # ----- Face -----
+
+    def _randomBlink(self):
+        if now() >= self._nextRandomBlink:
+            self.blink(wink=(randint(0, 19) == 0))
+            self._nextRandomBlink = now() + uniform(3, 30)
+
+    def _drawEyes(self, leftHeight, rightHeight=None):
+        '''Draws both eyes vertically centred, at the given heights'''
+        if rightHeight is None:
+            rightHeight = leftHeight
+        for x, h in ((self._eyePosL, leftHeight), (self._eyePosR, rightHeight)):
+            pygame.draw.ellipse(self.display, self.accent, [x, (self.height - h) / 2, self._eyeDim[0], h], 0)
+
+    def _drawFace(self):
+        eyeHeight = self._eyeDim[1]
+        height = eyeHeight
+
+        if self._blink is not None:
+            # Closes over the first half, opens over the second
+            height = abs(1 - 2 * self._blink.progress) * eyeHeight
+            if self._blink.done:
+                self._blink = None
+
+        self._drawEyes(height, eyeHeight if self._winking else height)
+
+        if self._smiling:
+            pass  # TODO: draw a smile here
+
+    # ----- Menu transitions -----
+
+    def _drawMenuBox(self, height):
+        '''Draws the home screen revealed through a box of the given height, centred vertically'''
+        self._drawHome()
+        background = ut.getConfig('backgroundcolour')
+        top = (self.height - height) / 2
+        pygame.draw.rect(self.display, background, [0, 0, self.width, top], 0)
+        pygame.draw.rect(self.display, background, [0, top + height, self.width, top], 0)
+        pygame.draw.rect(self.display, self.accent, [self.padding, top, self.width - 2 * self.padding, height], self.lineWidth)
+
+    def _drawBar(self, x, length):
+        y = (self.height - 2 * self.lineWidth) / 2
+        pygame.draw.rect(self.display, self.accent, [x, y, length, 2 * self.lineWidth], self.lineWidth)
+
+    def _drawMenuOpening(self):
+        if self._menuAnim.done:
+            self._screen = 'home'
+            self._drawHome()
+            return
+
+        phase, t = self._menuAnim.phase(3)
+        lineHeight = 2 * self.lineWidth
+        boxHeight = self.height - 2 * self.padding
+
+        if phase == 0:
+            # Eyes squash down into flat lines
+            self._drawEyes(lerp(self._eyeDim[1], lineHeight, t))
+
+        elif phase == 1:
+            # Lines stretch out from the eyes until they meet in the middle
+            length = lerp(self._eyeDim[0], self.width / 2 - self.padding, t)
+            leftX = lerp(self._eyePosL, self.padding, t)
+            self._drawBar(leftX, length)
+            self._drawBar(self.width - leftX - length, length)
+
+        else:
+            # Box opens up to reveal the menu
+            self._drawMenuBox(lerp(lineHeight, boxHeight, t))
+
+    def _drawMenuClosing(self):
+        if self._menuAnim.done:
+            self._screen = 'face'
+            self._drawFace()
+            return
+
+        phase, t = self._menuAnim.phase(3)
+        lineHeight = 2 * self.lineWidth
+        boxHeight = self.height - 2 * self.padding
+
+        if phase == 0:
+            # Box squashes down into a line
+            self._drawMenuBox(lerp(boxHeight, lineHeight, t))
+
+        elif phase == 1:
+            # Line shrinks into the centre
+            length = lerp(self.width - 2 * self.padding, 0, t)
+            self._drawBar((self.width - length) / 2, length)
+
+        else:
+            # Eyes grow back
+            self._drawEyes(lerp(0, self._eyeDim[1], t))
+
+    # ----- Menus -----
+
+    def _drawMenuFrame(self, title):
+        '''Draws the border, taskbar and title shared by every menu screen'''
+        p, lw = self.padding, self.lineWidth
+        iconSize = self._taskbarIconSize
+        pygame.draw.rect(self.display, self.accent, [p, p, self.width - 2 * p, self.height - 2 * p], lw)
+
+        inside = 2 * p + lw
+        dividerY = inside + iconSize + p
+        pygame.draw.rect(self.display, self.accent, [inside, dividerY, self.width - 2 * inside, 2 * lw], lw)
+
+        self.display.blit(self._taskbarIcons['home'], (inside, inside))
+        self.display.blit(self._menuTitles[title], (inside + iconSize + p, inside))
+        self.display.blit(self._taskbarIcons[f'battery{self.batteryPercent}'], (self.width - inside - iconSize, inside))
+
+        # With no signal the internet icon flashes
+        flashOn = now() % 1.6 < 0.8
+        if self.internetPercent > 0 or flashOn:
+            self.display.blit(self._taskbarIcons[f'internet{self.internetPercent}'],
+                              (self.width - inside - 2 * iconSize - p, inside))
+
+    def _drawHome(self):
+        self._drawMenuFrame('Robit Home')
+
+        for app in self.homescreen:
+            button = self.appButtons[app]
+            self.display.blit(self._appIcons[app], button)
+            label = self._appTitles[app].get_rect(centerx=button.centerx, top=button.top + self._appIconSize)
+            self.display.blit(self._appTitles[app], label)
+
+    def _drawSettings(self):
+        self._drawMenuFrame('Settings')
+
+        for i, slider in enumerate(self._sliders):
+            self.display.blit(self._getSliderGradient(i), slider)
+            knob = (slider.left + self.accent[i], slider.centery)
+            pygame.draw.circle(self.display, self.accent, knob, 12, 0)
+            pygame.draw.circle(self.display, 'grey', knob, 9, 0)
+
+        pygame.draw.rect(self.display, 'red', self._resetButton, width=0)
+
+    def _getSliderGradient(self, channel):
+        '''Gradient for one colour channel, with the other two channels held at their current values.
+            Cached until those other channels change.'''
+        key = tuple(c for i, c in enumerate(self.accent) if i != channel)
+
+        if self._sliderGradientKeys[channel] != key:
+            surf = pygame.Surface((SLIDERWIDTH, SLIDERHEIGHT)).convert()
+            colour = list(self.accent)
+            for x in range(SLIDERWIDTH):
+                colour[channel] = x
+                pygame.draw.line(surf, colour, (x, 0), (x, SLIDERHEIGHT - 1))
+            self._sliderGradients[channel] = surf
+            self._sliderGradientKeys[channel] = key
+
+        return self._sliderGradients[channel]
