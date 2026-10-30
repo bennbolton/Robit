@@ -1,9 +1,14 @@
 import configparser
 import os
 
+import pygame
+
 config = configparser.RawConfigParser()
 
-CONFIGPATH = os.path.join(os.path.dirname(__file__), 'config.cfg')
+BASEDIR = os.path.dirname(os.path.abspath(__file__))
+CONFIGPATH = os.path.join(BASEDIR, 'config.cfg')
+IMGDIR = os.path.join(BASEDIR, 'data', 'imgs', 'icons')
+FONTPATH = os.path.join(BASEDIR, 'data', 'pixel.otf')
 config.read(CONFIGPATH)
 
 
@@ -33,5 +38,53 @@ def getConfig(*keys):
 def getDefaultConfig(key):
     if key in config['DEFAULT']:
         return eval(config['DEFAULT'][str(key)])
-        
+
+
+
+# ----- Drawing helpers -----
+
+def now():
+    '''Seconds since pygame.init()'''
+    return pygame.time.get_ticks() / 1000
+
+
+def lerp(start, end, t):
+    return start + (end - start) * t
+
+
+def colourise(image, colour):
+    '''Returns a copy of image with every pixel set to colour, keeping the alpha'''
+    image = image.copy()
+    image.fill((0, 0, 0, 255), None, pygame.BLEND_RGBA_MULT)
+    image.fill(tuple(colour[:3]) + (0,), None, pygame.BLEND_RGBA_ADD)
+    return image
+
+
+def loadIcon(path, size, colour):
+    img = pygame.image.load(path)
+    img = pygame.transform.scale(img, (size, size))
+    return colourise(img, colour)
+
+
+class Animation():
+    '''Tracks progress through a fixed length of real time, independent of frame rate'''
+
+    def __init__(self, duration):
+        self.start = now()
+        self.duration = duration
+
+    @property
+    def progress(self):
+        '''0 at the start, 1 once the duration has passed'''
+        return min(1, (now() - self.start) / self.duration)
+
+    @property
+    def done(self):
+        return self.progress >= 1
+
+    def phase(self, count):
+        '''Splits the animation into equal phases. Returns (phase index, progress within that phase)'''
+        scaled = self.progress * count
+        index = min(int(scaled), count - 1)
+        return index, scaled - index
 

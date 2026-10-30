@@ -20,6 +20,9 @@ class Robit():
             query = None
         return query
 
+    def say(self, string:str):
+        raise NotImplementedError
+
 
     def update(self):
         self.ui.update()
