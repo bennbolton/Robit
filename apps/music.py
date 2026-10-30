@@ -1,5 +1,3 @@
-import string
-
 import pygame
 
 import utils as ut
@@ -11,9 +9,6 @@ DEVICENAME = 'Robit'  # should match device_name in go-librespot's config.yml
 BARHEIGHT = 10
 BUTTONSIZE = 60
 BUTTONGAP = 120
-
-# The pixel font only has letters, so anything else (numbers, punctuation, accents) uses pygame's built in font
-PIXELCHARS = set(string.ascii_letters + ' ')
 
 
 class MusicApp(App):
@@ -37,7 +32,6 @@ class MusicApp(App):
         self._position = 0
         self._positionTime = ut.now()
 
-        self._fallbackFonts = {ui.titleFont: pygame.font.Font(None, 44), ui.labelFont: pygame.font.Font(None, 32)}
         self._buttons = {}
         self._layoutButtons(ui.contentRect)
         self._renderText()
@@ -139,13 +133,9 @@ class MusicApp(App):
         elif self.running:
             lines = ['Waiting for Spotify', f'Connect to {self.deviceName} in the Spotify app']
         else:
-            lines = ['Spotify is off', 'The Spotify service is not running']
-
-        self._lines = []
-        for font, line in zip([self.ui.titleFont, self.ui.labelFont], lines):
-            if not set(line) <= PIXELCHARS:
-                font = self._fallbackFonts[font]
-            self._lines.append(font.render(line, True, self.ui.accent))
+            lines = ['Spotify is off', "go-librespot isn't running"]
+        fonts = [self.ui.titleFont, self.ui.labelFont]
+        self._lines = [font.render(line, True, self.ui.accent) for font, line in zip(fonts, lines)]
 
     def _layoutButtons(self, rect):
         centreY = rect.top + 190

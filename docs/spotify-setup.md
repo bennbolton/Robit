@@ -1,89 +1,66 @@
-# Spotify Connect setup (Raspberry Pi)
+# Spotify Connect setup
 
 Robit uses [go-librespot](https://github.com/devgianlu/go-librespot) to appear as a Spotify Connect speaker.
-go-librespot runs as its own background service and plays the audio. The Music app (`apps/music.py`) only
-reads what it's doing and sends play/pause/skip through its local API on port 3678.
+go-librespot runs as its own program and plays the audio. The Music app (`apps/music.py`) only reads what
+it's doing and sends play/pause/skip through its local API on `localhost:3678`.
 
-Anyone on the same network can then pick **Robit** from the devices list in the Spotify app.
+Anyone on the same network can pick **Robit** from the devices list in the Spotify app.
 They need Spotify Premium, because free accounts can't use Connect speakers.
 
-## 1. Install go-librespot
+Everything lives in `spotify/`:
 
-Download the Linux build for the Pi from the
-[latest release](https://github.com/devgianlu/go-librespot/releases/latest). Use arm64 on a 64-bit
-Raspberry Pi OS, and check `uname -m` if you're not sure. Then put the binary on the path:
+| File | What it's for |
+| --- | --- |
+| `config.yml` | go-librespot settings (name, audio, API port), shared by both scripts |
+| `run-mac.sh` | run it on a Mac for testing |
+| `setup-pi.sh` | one-time install on the Pi as a service that starts on boot |
 
-```bash
-sudo install -m 755 go-librespot /usr/local/bin/go-librespot
-```
-
-If there's no build for your Pi, build it from source. That needs Go 1.25 or newer, plus:
+## Testing on a Mac
 
 ```bash
-sudo apt-get install libogg-dev libvorbis-dev libflac-dev libmpg123-dev libasound2-dev
+./spotify/run-mac.sh
 ```
 
-## 2. Config
-
-Create `~/.config/go-librespot/config.yml`:
-
-```yaml
-device_name: Robit          # must match DEVICENAME in apps/music.py
-device_type: speaker
-audio_backend: alsa
-audio_device: default       # change if the speaker isn't the default ALSA device (see `aplay -L`)
-bitrate: 320
-
-# Anyone on the network can connect from their own Spotify account
-credentials:
-  type: zeroconf
-
-# Local API the Music app talks to. Keep it on localhost so only the Pi can control it
-server:
-  enabled: true
-  address: localhost
-  port: 3678                # must match spotifyapi in config.cfg
-```
-
-## 3. Run it as a service
-
-Create `/etc/systemd/system/go-librespot.service`, replacing `YOURUSER` with the Pi's username:
-
-```ini
-[Unit]
-Description=go-librespot Spotify Connect
-After=network-online.target sound.target
-Wants=network-online.target
-
-[Service]
-User=YOURUSER
-ExecStart=/usr/local/bin/go-librespot -config_dir /home/YOURUSER/.config/go-librespot
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Then:
+The first run installs go-librespot with Homebrew. It then runs in that terminal until you press Ctrl+C.
+Audio plays through the Mac's speakers. In another terminal, start the UI:
 
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now go-librespot
+.venv/bin/python main.py
 ```
 
-## 4. Check it
+Open the Music app and pick **Robit** in Spotify on your phone or computer.
+Login state is kept in `~/Library/Application Support/Robit/go-librespot`, outside the repo.
+
+## Setting up the Pi
+
+On the Pi, from the repo folder, as your normal user (it asks for sudo itself):
 
 ```bash
-systemctl status go-librespot
-curl -i http://localhost:3678/status
+./spotify/setup-pi.sh
 ```
 
-`/status` returns `204 No Content` until someone connects, then JSON with the current track.
-After that, the Music app should change from "Spotify is off" to "Waiting for Spotify".
+This:
+- downloads the go-librespot release that matches the Pi
+- copies `spotify/config.yml` to `~/.config/go-librespot/`
+- installs and starts a `go-librespot` systemd service
+- checks the API responds
+
+Run it again after changing `config.yml`, or with `GO_LIBRESPOT_VERSION=vX.Y.Z` to change version.
+
+If the speaker isn't the Pi's default audio device, set `audio_device` in `config.yml`.
+`aplay -L` lists the devices.
+
+Useful commands:
+
+```bash
+journalctl -u go-librespot -f          # logs
+sudo systemctl restart go-librespot
+curl -i http://localhost:3678/status   # 204 until someone connects, then JSON
+```
 
 ## Notes
 
-- If Robit doesn't show up in Spotify, check the Pi and the phone are on the same network and that mDNS
-  isn't blocked. go-librespot can also use avahi for discovery: `zeroconf_backend: avahi` in config.yml.
+- If Robit doesn't show up in Spotify, check both devices are on the same network and mDNS isn't blocked.
+  go-librespot can use avahi instead: add `zeroconf_backend: avahi` to `config.yml`.
 - Volume, shuffle, repeat, album art and the queue are all available from the same API for later.
-  See the API spec in the go-librespot repo.
+  See `api-spec.yml` in the go-librespot repo.

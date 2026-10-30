@@ -1,0 +1,18 @@
+# go-librespot config, shared by setup-pi.sh and run-mac.sh.
+# Options: https://github.com/devgianlu/go-librespot (config_schema.json)
+
+device_name: Robit          # name shown in the Spotify app. The Music app's DEVICENAME should match
+device_type: speaker
+audio_backend: alsa         # run-mac.sh swaps this for audio-toolbox
+audio_device: default       # ALSA device for the speaker. `aplay -L` on the Pi lists them
+bitrate: 320
+
+# Anyone on the network can connect with their own account (Premium needed)
+credentials:
+  type: zeroconf
+
+# Local API the Music app talks to. localhost only, so nothing else on the network can control it
+server:
+  enabled: true
+  address: localhost
+  port: 3678                # must match spotifyapi in config.cfg

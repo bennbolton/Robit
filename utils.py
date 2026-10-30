@@ -8,7 +8,10 @@ config = configparser.RawConfigParser()
 BASEDIR = os.path.dirname(os.path.abspath(__file__))
 CONFIGPATH = os.path.join(BASEDIR, 'config.cfg')
 IMGDIR = os.path.join(BASEDIR, 'data', 'imgs', 'icons')
-FONTPATH = os.path.join(BASEDIR, 'data', 'pixel.otf')
+# Jersey 10, SIL Open Font License (data/fonts/Jersey10-OFL.txt)
+FONTPATH = os.path.join(BASEDIR, 'data', 'fonts', 'Jersey10-Regular.ttf')
+TITLEFONTSIZE = 50
+LABELFONTSIZE = 38
 config.read(CONFIGPATH)
 
 

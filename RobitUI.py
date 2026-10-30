@@ -61,8 +61,8 @@ class RobitUI():
         # Menu frame
         self.taskbarIconSize = self.width / 20
         self.appIconSize = self.width / 10
-        self.titleFont = pygame.font.Font(ut.FONTPATH, 40)
-        self.labelFont = pygame.font.Font(ut.FONTPATH, 30)
+        self.titleFont = pygame.font.Font(ut.FONTPATH, ut.TITLEFONTSIZE)
+        self.labelFont = pygame.font.Font(ut.FONTPATH, ut.LABELFONTSIZE)
 
         p, lw = self.padding, self.lineWidth
         self._frameInside = 2 * p + lw
